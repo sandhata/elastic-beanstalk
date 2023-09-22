@@ -40,6 +40,50 @@ data "aws_subnets" "default_subs" {
   }
 }
 
+resource "aws_security_group" "ingress-all-test" {
+name = "allow-all-sg"
+vpc_id = "${aws_default_vpc.default.id}"
+ingress {
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+  }
+  ingress {
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
+    from_port = 3306
+    to_port = 3306
+    protocol = "tcp"
+  }
+// Terraform removes the default rule
+  egress {
+   from_port = 0
+   to_port = 0
+   protocol = "-1"
+   cidr_blocks = ["0.0.0.0/0"]
+ }
+}
+
+resource "tls_private_key" "pk" { #Creates a PEM (and OpenSSH) formatted private key.
+  algorithm = "RSA"  
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "kp" {
+  key_name   = "LinuxVM"       # Create a "LinuxVM" to AWS!!
+  public_key = tls_private_key.pk.public_key_openssh
+}
+
+resource "local_file" "ssh_key" {
+  filename = "${aws_key_pair.kp.key_name}.pem"
+  content = tls_private_key.pk.private_key_pem
+  file_permission = "0400"
+}
+
 resource "aws_elastic_beanstalk_configuration_template" "tf_template" {
   name                = "tf-prod-template-config"
   application         = aws_elastic_beanstalk_application.demo_ebapp1.name
@@ -73,6 +117,35 @@ resource "aws_elastic_beanstalk_configuration_template" "tf_template" {
       name = "IamInstanceProfile"
       value = aws_iam_instance_profile.elastic_beanstalk_ec2_profile.arn
   }
+    setting {
+      namespace = "aws:autoscaling:launchconfiguration"
+      name = "SecurityGroups"
+      value = aws_security_group.ingress-all-test.id
+  }
+  setting {
+      namespace = "aws:autoscaling:asg"
+      name = "MinSize"
+      value = 1
+  }
+
+  setting {
+      namespace = "aws:autoscaling:asg"
+      name = "MaxSize"
+      value = 2
+  }
+
+  setting {
+      namespace = "aws:elasticbeanstalk:environment"
+      name = "EnvironmentType"
+      value = "LoadBalanced"
+  }
+
+ /* setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "EC2KeyName"
+    value     = local_file.ssh_key.filename
+    resource  = ""
+  }*/
 }
 
 resource "aws_elastic_beanstalk_environment" "tfenvprod" {
@@ -82,3 +155,5 @@ resource "aws_elastic_beanstalk_environment" "tfenvprod" {
   version_label = var.app_version
   
 }
+
+
