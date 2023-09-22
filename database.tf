@@ -11,4 +11,6 @@ password = "Admin54132"
 parameter_group_name = "default.mysql5.7"
 skip_final_snapshot  = true
 final_snapshot_identifier  = true
+publicly_accessible = true
+#security_group_names = [aws_security_group.ingress-all-test.name]
 }
